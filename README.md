@@ -7,8 +7,8 @@
 You should have working GPDB or ADB cluster with installed PXF.
 
 ## Tarantool prerequisites
-[Cartridge-java](https://github.com/tarantool/cartridge-java) look at parts: 2-5
 
+[Cartridge-java](https://github.com/tarantool/cartridge-java) look at parts: 2-5
 
 ### BUILD
 
@@ -17,6 +17,7 @@ You should have working GPDB or ADB cluster with installed PXF.
 ```
 
 ### INSTALL
+
 You will get a `pxf-tarantool/build` folder with target jars. Copy them to each GPDB or ADB host and delete the old one:
 
 ```shell script
@@ -41,11 +42,13 @@ From GPDB SQL console try to execute:
 
 ```greenplum
 CREATE WRITABLE EXTERNAL TABLE tarantool_tbl (a int, b varchar, bucket_id bigint)
-  LOCATION ('pxf://<space>?PROFILE=<profile>&TARANTOOL_SERVER=<tarantool-router>')
-  FORMAT 'CUSTOM' (FORMATTER='pxfwritable_export');
+    LOCATION ('pxf://<space>?PROFILE=<profile>&TARANTOOL_SERVER=<tarantool-router>')
+    FORMAT 'CUSTOM' (FORMATTER = 'pxfwritable_export');
 -- where profile = 'tarantool-upsert' or 'tarantool-delete'
 
-insert into tarantool_tbl values (1, 'a', null), (2, 'b', null);
+insert into tarantool_tbl
+values (1, 'a', null),
+       (2, 'b', null);
 
 drop external table tarantool_tbl;
 ```
