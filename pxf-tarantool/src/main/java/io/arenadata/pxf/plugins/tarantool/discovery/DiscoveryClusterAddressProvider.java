@@ -57,51 +57,29 @@ public class DiscoveryClusterAddressProvider implements TarantoolClusterAddressP
 
     @Override
     public synchronized Collection<TarantoolServerAddress> getAddresses() {
-        TarantoolClient<TarantoolTuple, TarantoolResult<TarantoolTuple>> client = null;
-        try {
+        List<TarantoolServerAddress> tarantoolServerAddresses = new ArrayList<>();
+        try (TarantoolClient<TarantoolTuple, TarantoolResult<TarantoolTuple>> client = clientProvider.provide(config, routerAddress)) {
             List<?> result;
-            try {
-                client = clientProvider.provide(config, routerAddress);
-                CompletableFuture<List<?>> resultFuture = client.eval(DISCOVERY_COMMAND);
-                result = resultFuture.get();
-            } catch (Exception e) {
-                LOGGER.error("Unexpected exception during discovery", e);
-                throw new TarantoolClientException("Unexpected exception during discovery", e);
-            }
-
+            CompletableFuture<List<?>> resultFuture = client.eval(DISCOVERY_COMMAND);
+            result = resultFuture.get();
             if (result.size() != 1) {
-                LOGGER.error("Unexpected result of discovery call, expected: 1, got: {}", result.size());
                 throw new TarantoolClientException("Incorrect result of discovery call, expected: 1, got: " + result.size());
             }
-
             Map<String, Map<String, String>> foundServices = (Map<String, Map<String, String>>) result.get(0);
             if (foundServices.isEmpty()) {
-                LOGGER.error("Could not discover servers. Result is empty.");
                 throw new TarantoolClientException("Could not discover servers. Result is empty.");
             }
-
-            List<TarantoolServerAddress> tarantoolServerAddresses = new ArrayList<>();
-            try {
-                for (Map<String, String> value : foundServices.values()) {
-                    String uri = value.get("uri");
-                    tarantoolServerAddresses.add(new TarantoolServerAddress(uri));
-                }
-            } catch (Exception e) {
-                LOGGER.error("Exception during parsing discovery result", e);
-                throw new TarantoolClientException("Exception during parsing discovery result", e);
+            for (Map<String, String> value : foundServices.values()) {
+                String uri = value.get("uri");
+                tarantoolServerAddresses.add(new TarantoolServerAddress(uri));
             }
-
-            LOGGER.info("Successfully retrieved tarantool servers: {}", tarantoolServerAddresses);
-            return tarantoolServerAddresses;
-        } finally {
-            if (client != null) {
-                try {
-                    client.close();
-                } catch (Exception e) {
-                    LOGGER.error("Exception during discovery tarantool client close, ignored", e);
-                }
-            }
+        } catch (Exception e) {
+            LOGGER.error("Exception during discovery", e);
+            throw new TarantoolClientException("Exception during discovery", e);
         }
+
+        LOGGER.info("Successfully retrieved tarantool servers: {}", tarantoolServerAddresses);
+        return tarantoolServerAddresses;
     }
 
     @Override

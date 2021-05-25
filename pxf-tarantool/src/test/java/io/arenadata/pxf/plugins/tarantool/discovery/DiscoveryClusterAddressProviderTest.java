@@ -88,27 +88,17 @@ class DiscoveryClusterAddressProviderTest {
     }
 
     @Test
-    void ignoreFailingCloseAfterSuccessfulCall() throws Exception {
+    void failOnCloseAfterSuccessfulCall() throws Exception {
         // arrange
         when(tarantoolClient.eval(Mockito.anyString())).thenReturn(CompletableFuture.completedFuture(asList(CORRECT_RESULT)));
         doThrow(new RuntimeException("Exception")).when(tarantoolClient).close();
 
         // act
-        Collection<TarantoolServerAddress> addresses = discoveryClusterAddressProvider.getAddresses();
+        assertThrows(TarantoolClientException.class, () -> discoveryClusterAddressProvider.getAddresses());
 
         // assert
         verify(tarantoolClient).eval(Mockito.anyString());
         verify(tarantoolClient).close();
-        assertThat(addresses, containsInAnyOrder(
-                allOf(
-                        hasProperty("host", is("localhost")),
-                        hasProperty("port", is(1111))
-                ),
-                allOf(
-                        hasProperty("host", is("10.10.10.10")),
-                        hasProperty("port", is(2222))
-                )
-        ));
     }
 
     @Test
