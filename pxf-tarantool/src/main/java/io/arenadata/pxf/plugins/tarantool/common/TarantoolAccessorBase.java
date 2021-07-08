@@ -36,9 +36,8 @@ import org.greenplum.pxf.api.model.Accessor;
 import org.greenplum.pxf.api.model.BasePlugin;
 import org.greenplum.pxf.api.model.RequestContext;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 public abstract class TarantoolAccessorBase extends BasePlugin implements Accessor {
     private static final int DEFAULT_TIMEOUT_CONNECT = 5000;
@@ -51,11 +50,14 @@ public abstract class TarantoolAccessorBase extends BasePlugin implements Access
     private static final String TIMEOUT_CONNECT = "tarantool.cartridge.timeout.connect";
     private static final String TIMEOUT_READ = "tarantool.cartridge.timeout.read";
     private static final String TIMEOUT_REQUEST = "tarantool.cartridge.timeout.request";
-
-    protected List<CompletableFuture<TarantoolResult<TarantoolTuple>>> futures = new ArrayList<>();
     protected String spaceName;
     protected TarantoolConnection connection;
     protected TarantoolSpaceOperations<TarantoolTuple, TarantoolResult<TarantoolTuple>> spaceOperations;
+
+    protected AtomicLong activeTasks = new AtomicLong();
+    protected AtomicLong totalTasks = new AtomicLong();
+    protected AtomicLong errorCount = new AtomicLong();
+    protected AtomicReference<Throwable> firstException = new AtomicReference(null);
 
     private DiscoveryClientProvider discoveryClientProvider = ClusterTarantoolTupleClient::new;
     private TarantoolConnectionProvider tarantoolConnectionProvider = new TarantoolConnectionProviderImpl();
@@ -124,32 +126,40 @@ public abstract class TarantoolAccessorBase extends BasePlugin implements Access
         TarantoolClusterAddressProvider discoveryClusterAddressProvider = new DiscoveryClusterAddressProvider(config, routerAddress, discoveryClientProvider);
         connection = tarantoolConnectionProvider.provide(config, discoveryClusterAddressProvider);
         spaceOperations = connection.getClient().space(spaceName);
-        futures.clear();
+        totalTasks.set(0);
+        activeTasks.set(0);
+        errorCount.set(0);
+        firstException.set(null);
         return true;
     }
 
     @Override
     public void closeForWrite() throws Exception {
-        LOG.info("Closing \"{}\" for write in \"{}\". Futures to check: {}, segment: {}, total: {}",
-                context.getProfile(), spaceName, futures.size(), context.getSegmentId(), context.getTotalSegments());
+        LOG.info("Closing \"{}\" for write in \"{}\". Total futures: {}, active futures: {}, segment: {}, total: {}",
+                context.getProfile(), spaceName, totalTasks.get(), activeTasks.get(), context.getSegmentId(), context.getTotalSegments());
 
         try {
-            futures.forEach(future -> {
-                try {
-                    TarantoolResult<TarantoolTuple> result = future.get();
-                    LOG.debug("Task completed successfully: {}", result);
-                } catch (Exception e) {
-                    LOG.error("Task ended up with exception", e);
-                    throw new IllegalStateException("Exception during running task", e);
-                }
-            });
+            while (activeTasks.get() > 0 && errorCount.get() == 0) {
+                Thread.sleep(100L);
+            }
 
-            LOG.info("Closing \"{}\" for write in \"{}\". All futures complete, segment: {}, total: {} ",
+            if (errorCount.get() > 0) {
+                LOG.error("Failed \"{}\" for write in \"{}\". Errors: {}, segment: {}, total: {}",
+                        context.getProfile(), spaceName, errorCount.get(), context.getSegmentId(), context.getTotalSegments(), firstException.get());
+                throw new IllegalStateException("Some of the tasks completed exceptionally", firstException.get());
+            }
+
+            LOG.info("Closing \"{}\" for write in \"{}\". All futures complete, segment: {}, total: {}",
                     context.getProfile(), spaceName, context.getSegmentId(), context.getTotalSegments());
         } finally {
-            futures.clear();
+            totalTasks.set(0);
+            activeTasks.set(0);
+            errorCount.set(0);
+            firstException.set(null);
             if (connection != null) {
                 connection.close();
+                connection = null;
+                spaceOperations = null;
             }
             LOG.info("Closed \"{}\" for write in \"{}\", segment: {}, total: {}",
                     context.getProfile(), spaceName, context.getSegmentId(), context.getTotalSegments());

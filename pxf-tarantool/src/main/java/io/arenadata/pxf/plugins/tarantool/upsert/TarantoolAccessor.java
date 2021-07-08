@@ -65,9 +65,20 @@ public class TarantoolAccessor extends TarantoolAccessorBase implements Accessor
     @Override
     public boolean writeNextObject(OneRow oneRow) throws Exception {
         try {
+            totalTasks.incrementAndGet();
+            activeTasks.incrementAndGet();
             List<?> columns = (List<?>) oneRow.getData();
             TarantoolTuple tuple = connection.getTupleFactory().create(columns);
-            return futures.add(spaceOperations.replace(tuple));
+            spaceOperations.replace(tuple)
+                    .whenComplete((tarantoolTuples, throwable) -> {
+                        if (throwable != null) {
+                            LOG.error("Task ended up with exception", throwable);
+                            firstException.compareAndSet(null, throwable);
+                            errorCount.incrementAndGet();
+                        }
+                        activeTasks.decrementAndGet();
+                    });
+            return true;
         } catch (Exception e) {
             LOG.error("Exception during request", e);
             return false;
