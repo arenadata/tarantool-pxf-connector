@@ -33,16 +33,20 @@ cp cartridge-driver-0.4.3.jar /usr/lib/pxf/lib/shared/
 chown pxf:pxf /usr/lib/pxf/lib/shared/cartridge-driver-0.4.3
 chmod 755 /usr/lib/pxf/lib/shared/cartridge-driver-0.4.3
 ```
+
 Then sync greenplum cluster
+
 ```shell script
 pxf cluster sync
 ```
+
 ### CHECK
+
 From GPDB SQL console try to execute:
 
 ```greenplum
 CREATE WRITABLE EXTERNAL TABLE tarantool_tbl (a int, b varchar, bucket_id bigint)
-    LOCATION ('pxf://<space>?PROFILE=<profile>&TARANTOOL_SERVER=<tarantool-router>')
+    LOCATION ('pxf://<space>?PROFILE=<profile>&TARANTOOL_SERVER=<tarantool-router>&USER=<user>&PASSWORD=<password>')
     FORMAT 'CUSTOM' (FORMATTER = 'pxfwritable_export');
 -- where profile = 'tarantool-upsert' or 'tarantool-delete'
 
