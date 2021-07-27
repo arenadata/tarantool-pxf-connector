@@ -34,6 +34,9 @@ chown pxf:pxf /usr/lib/pxf/lib/shared/cartridge-driver-0.4.3
 chmod 755 /usr/lib/pxf/lib/shared/cartridge-driver-0.4.3
 ```
 
+Update profile.xml (`/var/lib/pxf/conf/pxf-profiles.xml`) by **adding** missing items from repository
+one (`pxf-tarantool/env/pxf-profiles.xml`)
+
 Then sync greenplum cluster
 
 ```shell script
